@@ -30,6 +30,7 @@ class Connector(object):
     def __init__(self, url, username=None, password=None, verify=True):
         self._url = url
         self._verify = verify
+        # A wrapper for requests.Session to override 'verify' property, ignoring REQUESTS_CA_BUNDLE environment variable.
         self._session = wrapped_session.WrappedSession()
         self._session.verify = self._verify
 
