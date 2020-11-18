@@ -22,6 +22,7 @@ from six.moves import http_client
 from sushy import auth as sushy_auth
 from sushy import connector
 from sushy import exceptions
+from sushy import wrapped_session
 from sushy.tests.unit import base
 
 
@@ -94,7 +95,7 @@ class ConnectorMethodsTestCase(base.TestCase):
             'hash-token', self.conn._session.headers['X-Auth-Token'])
 
     def test_close(self):
-        session = mock.Mock(spec=requests.Session)
+        session = mock.Mock(spec=wrapped_session.WrappedSession)
         self.conn._session = session
         self.conn.close()
         session.close.assert_called_once_with()
@@ -113,7 +114,7 @@ class ConnectorOpTestCase(base.TestCase):
         self.conn._auth = mock_auth
         self.data = {'fake': 'data'}
         self.headers = {'X-Fake': 'header'}
-        self.session = mock.Mock(spec=requests.Session)
+        self.session = mock.Mock(spec=wrapped_session.WrappedSession)
         self.conn._session = self.session
         self.request = self.session.request
         self.request.return_value.status_code = http_client.OK
@@ -211,7 +212,7 @@ class ConnectorOpTestCase(base.TestCase):
         self.auth._session_key = 'asdf1234'
         self.auth.get_session_key.return_value = 'asdf1234'
         self.conn._auth = self.auth
-        self.session = mock.Mock(spec=requests.Session)
+        self.session = mock.Mock(spec=wrapped_session.WrappedSession)
         self.conn._session = self.session
         self.request = self.session.request
         first_response = mock.MagicMock()
@@ -286,3 +287,28 @@ class ConnectorOpTestCase(base.TestCase):
             self.conn._op('GET', 'http://foo.bar')
         exc = cm.exception
         self.assertEqual(http_client.FORBIDDEN, exc.status_code)
+
+class ConnectorVerifyTestCase(base.TestCase):
+
+    @mock.patch.object(sushy_auth, 'SessionOrBasicAuth', autospec=True)
+    def setUp(self, mock_auth):
+        mock_auth.get_session_key.return_value = None
+        mock_auth._session_key = None
+        self.auth = mock_auth
+        super(ConnectorVerifyTestCase, self).setUp()
+        self.conn = connector.Connector(
+            'https://foo.bar:1234', verify=False)
+        self.conn._auth = mock_auth
+        self.data = {'fake': 'data'}
+        self.headers = {'X-Fake': 'header'}
+        self.session = mock.Mock(spec=wrapped_session.WrappedSession)
+        self.session.verify = False
+        self.conn._session = self.session
+        self.request = self.session.request
+        self.request.return_value.status_code = http_client.OK
+
+    def test_ok_get(self):
+        self.conn._op('GET', path='fake/path', headers=self.headers)
+        self.request.assert_called_once_with(
+            'GET', 'https://foo.bar:1234/fake/path',
+            headers=self.headers, json=None)

@@ -20,6 +20,7 @@ from six.moves.urllib import parse
 
 from sushy import exceptions
 from sushy import utils
+from sushy import wrapped_session
 
 LOG = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class Connector(object):
     def __init__(self, url, username=None, password=None, verify=True):
         self._url = url
         self._verify = verify
-        self._session = requests.Session()
+        self._session = wrapped_session.WrappedSession()
         self._session.verify = self._verify
 
         # NOTE(etingof): field studies reveal that some BMCs choke at
