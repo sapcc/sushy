@@ -18,11 +18,16 @@ import logging
 from sushy import exceptions
 from sushy.resources import base
 from sushy.resources import common
+from sushy.resources import constants as res_cons
 from sushy.resources import mappings as res_maps
 from sushy.resources.system.storage import volume
+from sushy.taskmonitor import TaskMonitor
 from sushy import utils
 
 LOG = logging.getLogger(__name__)
+
+class ActionsField(base.CompositeField):
+    secure_erase = common.ActionField('#Drive.SecureErase')
 
 
 class Drive(base.ResourceBase):
@@ -68,6 +73,8 @@ class Drive(base.ResourceBase):
     status = common.StatusField('Status')
     """This type describes the status and health of the drive"""
 
+    _actions = ActionsField('Actions')
+
     @property
     @utils.cache_it
     def volumes(self):
@@ -105,3 +112,36 @@ class Drive(base.ResourceBase):
 
         self._conn.patch(self.path, data=data)
         self.invalidate()
+
+    def _get_secure_erase_action_element(self):
+        secure_erase = self._actions.secure_erase
+        if not secure_erase:
+            raise exceptions.MissingActionError(action='#Disk.SecureErase',
+                                                resource=self._path)
+        return secure_erase
+
+    def _secure_erase(self, apply_time=None):
+        payload = {}
+        oat_prop = '@Redfish.OperationApplyTime'
+        if apply_time:
+            payload[oat_prop] = res_maps.APPLY_TIME_VALUE_MAP_REV[apply_time]
+        target_uri = self._get_secure_erase_action_element().target_uri
+        r = self._conn.post(target_uri, data=payload, blocking=False)
+        return r, target_uri
+
+    def secure_erase(self, apply_time=None):
+        """Securely erase the drive.
+
+        :param apply_time: When to update the attributes. Optional.
+            APPLY_TIME_IMMEDIATE - Immediate
+            APPLY_TIME_ON_RESET - On reset
+        :raises: InvalidParameterValueError, if the target value is not
+            allowed.
+        :raises: ConnectionError
+        :raises: HTTPError
+        :returns: TaskMonitor
+        """
+        r, target_uri = self._secure_erase(apply_time)
+        return TaskMonitor.from_response(
+            self._conn, r, target_uri, self.redfish_version,
+            self.registries)
